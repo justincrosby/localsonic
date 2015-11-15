@@ -31,7 +31,6 @@
 #include "sounds.h"
 
 // these are arbitrary assignments for now
-#define LED_PIN 0
 #define START_PIN 1
 #define VOLUP_PIN 8
 #define VOLDOWN_PIN 9
@@ -130,7 +129,6 @@ int main(int argc, char** argv) {
     // set initial volume level
     setVolume();
     
-    return 0;
     while(1){
 	char filename[100];
 	bool volUp, volDown;
@@ -141,19 +139,20 @@ int main(int argc, char** argv) {
 	// if the volume buttons were pressed do the appropriate operation
 	// and start again from the beginning of the loop
 	if(volUp){
-	    vol += 5;
-	    setVolume();
+	    if(vol <= 100){
+		vol += 5;
+		setVolume();
+	    }
 	    continue;
 	}
 	if(volDown){
-	    vol -= 5;
-	    setVolume();
+	    if(vol >= 0){
+		vol -= 5;
+		setVolume();
+	    }
 	    continue;
 	}
-	// button testing
-	digitalWrite(LED_PIN, HIGH);
-	delay(1000);
-	digitalWrite(LED_PIN, LOW);
+	// remove after testing volume controls
 	continue;
 	
 	// send radio signal

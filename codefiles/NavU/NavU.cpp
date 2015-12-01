@@ -26,6 +26,8 @@
 #include <string.h>
 #include <wiringPi.h>
 #include <time.h>
+#include <bitset>
+#include <iostream>
 #include "/home/pi/rf24libs/RF24/RF24.h"
 
 #include "map.h"
@@ -42,7 +44,7 @@ using namespace std;
 #define EMITTER_4 4
 #define EMITTER_5 5
 // number of periods to emit ultrasonic
-#define NUM_CYCLES 10
+#define NUM_CYCLES 200
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
 #define NUM_SAMPLES 10
@@ -78,10 +80,10 @@ void inline ping(int emitterNum, char receiverNum){
 	delay(SAMPLE_DELAY);
     }
 }
-char inline receiveData(char receiverNum){
+uint16_t inline receiveData(char receiverNum){
     struct timespec currTime;
     long int startTime, endTime;
-    short data;
+    uint16_t data;
     radio.openReadingPipe(1,readPipe[(int)receiverNum]);
     radio.startListening();
     clock_gettime(CLOCK_REALTIME, &currTime);
@@ -91,7 +93,7 @@ char inline receiveData(char receiverNum){
         endTime = currTime.tv_nsec;
 	if(endTime - startTime >= RECEIVE_TIMEOUT){
 	    radio.stopListening();
-	    return -1;
+	    return 0xFFFF;
 	}
     }
     radio.read(&data, sizeof(data));
@@ -175,11 +177,11 @@ int main(int argc, char** argv) {
     
     while(1){
 	char data;
-	short nodeData[NUM_NODES * NUM_EMITTERS];
+	uint16_t nodeData[NUM_NODES * NUM_EMITTERS] = {0,0,0,0,0,0,0,0,0,0};
 	int location[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
 	float distance[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
 	int closestNode;
-	float closestDistance = 0;
+	float closestDistance = 100;
 	int closestEmitter;
 	bool volUp, volDown;
 	// wait til a button is pressed then continue
@@ -203,7 +205,7 @@ int main(int argc, char** argv) {
 	    continue;
 	}
 	// iterate through each node and each emitter
-	// pining and reading the return data
+	// pinging and reading the return data
 	for(data = 0; data < NUM_NODES; data++){
 	    radio.openReadingPipe(1, readPipe[(int)data]);
 	    for(int i = 0; i < NUM_EMITTERS; i++){
@@ -215,7 +217,21 @@ int main(int argc, char** argv) {
 	    }
 	    radio.closeReadingPipe(1);
 	}
-	
+	// debugging purposes
+//	uint16_t testData = 0x0A40;
+//	for(int i = 0; i < NUM_NODES; i++){
+//	    for(int j = 0; j < NUM_EMITTERS; j++){
+//		nodeData[i * NUM_EMITTERS + j] = testData;
+//		testData += 0x0101;
+//	    }
+//	    testData += 0x8080;
+//	}
+//	for(int i = 0; i < NUM_NODES * NUM_EMITTERS; i++){
+//	    bitset<8> x(nodeData[i]);
+//	    bitset<8> y(nodeData[i] >> 8);
+//	    cout << y << " | " << x << endl;
+//	}
+//	cout << endl;
 	for(int i = 0; i < NUM_NODES; i++){
 	    for(int j = 0; j < NUM_EMITTERS; j++){
 		// take the read data and split it up into two halves
@@ -237,6 +253,13 @@ int main(int argc, char** argv) {
 		}
 	    }
 	}
+	// debugging purposes
+//	cout << endl;
+//	for(int i = 0; i < NUM_NODES * NUM_RECEIVERS_PER_NODE; i++){
+//	    for(int j = 0; j < NUM_EMITTERS; j++){
+//		cout << location[i][j] << " | " << distance[i][j] << endl;
+//	    }
+//	}
 	// iterate through all the data and determine the shortest distance
 	// record the distance, node ID, and emitter number of
 	// the closest distance
@@ -249,6 +272,9 @@ int main(int argc, char** argv) {
 		}
 	    }
 	}
+	// debugging purposes
+//	cout << closestDistance << " " << closestNode << " " << closestEmitter;
+	
 	// emitter numbers 1-2 are on the right side
 	if(closestEmitter < 2){
 	    userFeedback(closestNode, closestDistance, RIGHT);

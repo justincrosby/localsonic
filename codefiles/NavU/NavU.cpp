@@ -1,5 +1,5 @@
 /* 
- * File:   NavU.c
+ * File:   NavU.cpp
  * Author: Justin
  *
  * This file contains the firmware for the NavU
@@ -23,13 +23,15 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <wiringPi.h>
+#include <time.h>
+#include "/home/pi/rf24libs/RF24/RF24.h"
 
 #include "map.h"
 #include "sounds.h"
 
+using namespace std;
 // these are arbitrary assignments for now
 #define START_PIN 1
 #define VOLUP_PIN 8
@@ -43,21 +45,58 @@
 #define NUM_CYCLES 10
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
+#define NUM_SAMPLES 10
+#define NUM_NODES 2
+#define SAMPLE_DELAY 500
+#define RECEIVE_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
+#define NANOSECONDS_PER_SECOND 1E9
+#define NUM_EMITTERS 5
+#define NUM_RECEIVERS_PER_NODE 2
+#define LEFT 0
+#define RIGHT 1
 
 
 // GLOBAL VARIABLES
 // default volume is 80%
 int vol = 80;
+RF24 radio(22,0);
+const uint8_t writePipe[6] = "1Pipe";
+const uint8_t readPipe[2][6] = {"2Pipe", "3Pipe"};
+const int emitters[5] = {EMITTER_1, EMITTER_2, EMITTER_3, EMITTER_4, EMITTER_5};
 // inline function so that the compiler does inline expansion
 // need to be as fast as possible, normal function calls take too long
-void inline usGen(int emitterNum){
-    int i;
-    for(i = 0; i<NUM_CYCLES; i++){
-	digitalWrite(emitterNum, LOW);
-	delayMicroseconds(PERIOD/2);
-	digitalWrite(emitterNum, HIGH);
-	delayMicroseconds(PERIOD/2);
+void inline ping(int emitterNum, char receiverNum){
+    for(int i = 0; i < NUM_SAMPLES; i++){
+	radio.writeBlocking(&receiverNum, sizeof(receiverNum), 1000);
+	radio.txStandBy(1000);
+	for(int j = 0; j < NUM_CYCLES; j++){
+	    digitalWrite(emitterNum, LOW);
+	    delayMicroseconds(PERIOD/2);
+	    digitalWrite(emitterNum, HIGH);
+	    delayMicroseconds(PERIOD/2);
+	}
+	delay(SAMPLE_DELAY);
     }
+}
+char inline receiveData(char receiverNum){
+    struct timespec currTime;
+    long int startTime, endTime;
+    short data;
+    radio.openReadingPipe(1,readPipe[(int)receiverNum]);
+    radio.startListening();
+    clock_gettime(CLOCK_REALTIME, &currTime);
+    startTime = currTime.tv_nsec;
+    while(!radio.available()){
+	clock_gettime(CLOCK_REALTIME, &currTime);
+        endTime = currTime.tv_nsec;
+	if(endTime - startTime >= RECEIVE_TIMEOUT){
+	    radio.stopListening();
+	    return -1;
+	}
+    }
+    radio.read(&data, sizeof(data));
+    radio.stopListening();
+    return data;
 }
 void playAudio(const char filename[100]){
     char str[100];
@@ -111,7 +150,7 @@ void userFeedback(int location, float distance, int direction){
 int main(int argc, char** argv) {
     // initial wiringPi setup, run once
     wiringPiSetup();
-    pinMode(LED_PIN, OUTPUT);
+    //pinMode(LED_PIN, OUTPUT);
     pinMode(EMITTER_1, OUTPUT);
     pinMode(EMITTER_2, OUTPUT);
     pinMode(EMITTER_3, OUTPUT);
@@ -128,9 +167,20 @@ int main(int argc, char** argv) {
     digitalWrite(EMITTER_5, LOW);
     // set initial volume level
     setVolume();
+    // setup radio    
+    radio.begin();
+    radio.printDetails();
+    radio.openWritingPipe(writePipe);
+    
     
     while(1){
-	char filename[100];
+	char data;
+	short nodeData[NUM_NODES * NUM_EMITTERS];
+	int location[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
+	float distance[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
+	int closestNode;
+	float closestDistance = 0;
+	int closestEmitter;
 	bool volUp, volDown;
 	// wait til a button is pressed then continue
 	while(!digitalRead(START_PIN) && 
@@ -152,30 +202,67 @@ int main(int argc, char** argv) {
 	    }
 	    continue;
 	}
-	// remove after testing volume controls
-	continue;
+	// iterate through each node and each emitter
+	// pining and reading the return data
+	for(data = 0; data < NUM_NODES; data++){
+	    radio.openReadingPipe(1, readPipe[(int)data]);
+	    for(int i = 0; i < NUM_EMITTERS; i++){
+		// send radio signal
+		ping(emitters[i], data);
+		// wait to receive radio signal
+		nodeData[(int)data * NUM_EMITTERS + i] = 
+			receiveData(data);
+	    }
+	    radio.closeReadingPipe(1);
+	}
 	
-	// send radio signal
-	usGen(EMITTER_1);
-	// wait to receive radio signal
-	// send radio signal
-	usGen(EMITTER_2);
-	// wait to receive radio signal
-	// send radio signal
-	usGen(EMITTER_3);
-	// wait to receive radio signal
-	// send radio signal
-	usGen(EMITTER_4);
-	// wait to receive radio signal
-	// send radio signal
-	usGen(EMITTER_5);
-	// wait to receive radio signal
-	// calculate the closest distance
-	// do logic to decide which audio file to play, save into filename
-	
-	playAudio(filename);
+	for(int i = 0; i < NUM_NODES; i++){
+	    for(int j = 0; j < NUM_EMITTERS; j++){
+		// take the read data and split it up into two halves
+		// each half corresponds to one of the receivers
+		char receiver[NUM_RECEIVERS_PER_NODE] = 
+		    {((char)(nodeData[i * NUM_EMITTERS + j] >> 8)), 
+		    ((char)(nodeData[i * NUM_EMITTERS + j] & 0xFF))};
+		// take bits 7-6 of each byte as the node ID
+		// take bits 5-1 of each byte as the integer distance
+		// take bit 0 of each byte as the flag for a half increment
+		for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
+		    location[i * NUM_RECEIVERS_PER_NODE + k][j] = 
+			(int)(receiver[k] >> 6);
+		    distance[i * NUM_RECEIVERS_PER_NODE + k][j] = 
+			(float)((receiver[k] >> 1) & 0x1F);
+		    if((receiver[k] & 1)){
+			distance[i * NUM_RECEIVERS_PER_NODE + k][j] += 0.5;
+		    }
+		}
+	    }
+	}
+	// iterate through all the data and determine the shortest distance
+	// record the distance, node ID, and emitter number of
+	// the closest distance
+	for(int i = 0; i < NUM_NODES * NUM_RECEIVERS_PER_NODE; i++){
+	    for(int j = 0; j < NUM_EMITTERS; j++){
+		if(distance[i][j] < closestDistance){
+		    closestDistance = distance[i][j];
+		    closestNode = location[i][j];
+		    closestEmitter = j + 1;
+		}
+	    }
+	}
+	// emitter numbers 1-2 are on the right side
+	if(closestEmitter < 2){
+	    userFeedback(closestNode, closestDistance, RIGHT);
+	}
+	// emitter numbers 3-4 are on the left side
+	else if(closestEmitter < 5){
+	    userFeedback(closestNode, closestDistance, LEFT);
+	}
+	else{
+	    // closest emitter is 5 so the user is below the node
+	}
     }
 
     return (EXIT_SUCCESS);
 }
+
 

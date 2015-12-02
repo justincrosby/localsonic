@@ -32,6 +32,7 @@
 
 #include "map.h"
 #include "sounds.h"
+#include "defs.h"
 
 using namespace std;
 // these are arbitrary assignments for now
@@ -47,13 +48,8 @@ using namespace std;
 #define NUM_CYCLES 200
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
-#define NUM_SAMPLES 10
 #define NUM_NODES 2
 #define SAMPLE_DELAY 500
-#define RECEIVE_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
-#define NANOSECONDS_PER_SECOND 1E9
-#define NUM_EMITTERS 5
-#define NUM_RECEIVERS_PER_NODE 2
 #define LEFT 0
 #define RIGHT 1
 
@@ -89,12 +85,12 @@ uint16_t inline receiveData(char receiverNum){
     clock_gettime(CLOCK_REALTIME, &currTime);
     startTime = currTime.tv_nsec;
     while(!radio.available()){
-	clock_gettime(CLOCK_REALTIME, &currTime);
+		clock_gettime(CLOCK_REALTIME, &currTime);
         endTime = currTime.tv_nsec;
-	if(endTime - startTime >= RECEIVE_TIMEOUT){
-	    radio.stopListening();
-	    return 0xFFFF;
-	}
+		if(endTime - startTime >= RECEIVE_TIMEOUT){
+		    radio.stopListening();
+		    return 0xFFFF;
+		}
     }
     radio.read(&data, sizeof(data));
     radio.stopListening();
@@ -142,7 +138,7 @@ void userFeedback(int location, float distance, int direction){
     playAudio(sounds[intpart]);
     // if there's a decimal part play it
     if(decpart != 0){
-	playAudio(SOUND_05);
+		playAudio(SOUND_05);
     }
     // connecting words
     playAudio(TOYOUR_SOUND);
@@ -176,116 +172,116 @@ int main(int argc, char** argv) {
     
     
     while(1){
-	char data;
-	uint16_t nodeData[NUM_NODES * NUM_EMITTERS] = {0,0,0,0,0,0,0,0,0,0};
-	int location[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
-	float distance[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
-	int closestNode;
-	float closestDistance = 100;
-	int closestEmitter;
-	bool volUp, volDown;
-	// wait til a button is pressed then continue
-	while(!digitalRead(START_PIN) && 
-		!(volUp = digitalRead(VOLUP_PIN)) &&
-		!(volDown = digitalRead(VOLDOWN_PIN))){}
-	// if the volume buttons were pressed do the appropriate operation
-	// and start again from the beginning of the loop
-	if(volUp){
-	    if(vol <= 100){
-		vol += 5;
-		setVolume();
-	    }
-	    continue;
-	}
-	if(volDown){
-	    if(vol >= 0){
-		vol -= 5;
-		setVolume();
-	    }
-	    continue;
-	}
-	// iterate through each node and each emitter
-	// pinging and reading the return data
-	for(data = 0; data < NUM_NODES; data++){
-	    radio.openReadingPipe(1, readPipe[(int)data]);
-	    for(int i = 0; i < NUM_EMITTERS; i++){
-		// send radio signal
-		ping(emitters[i], data);
-		// wait to receive radio signal
-		nodeData[(int)data * NUM_EMITTERS + i] = 
-			receiveData(data);
-	    }
-	    radio.closeReadingPipe(1);
-	}
-	// debugging purposes
-//	uint16_t testData = 0x0A40;
-//	for(int i = 0; i < NUM_NODES; i++){
-//	    for(int j = 0; j < NUM_EMITTERS; j++){
-//		nodeData[i * NUM_EMITTERS + j] = testData;
-//		testData += 0x0101;
-//	    }
-//	    testData += 0x8080;
-//	}
-//	for(int i = 0; i < NUM_NODES * NUM_EMITTERS; i++){
-//	    bitset<8> x(nodeData[i]);
-//	    bitset<8> y(nodeData[i] >> 8);
-//	    cout << y << " | " << x << endl;
-//	}
-//	cout << endl;
-	for(int i = 0; i < NUM_NODES; i++){
-	    for(int j = 0; j < NUM_EMITTERS; j++){
-		// take the read data and split it up into two halves
-		// each half corresponds to one of the receivers
-		char receiver[NUM_RECEIVERS_PER_NODE] = 
-		    {((char)(nodeData[i * NUM_EMITTERS + j] >> 8)), 
-		    ((char)(nodeData[i * NUM_EMITTERS + j] & 0xFF))};
-		// take bits 7-6 of each byte as the node ID
-		// take bits 5-1 of each byte as the integer distance
-		// take bit 0 of each byte as the flag for a half increment
-		for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
-		    location[i * NUM_RECEIVERS_PER_NODE + k][j] = 
-			(int)(receiver[k] >> 6);
-		    distance[i * NUM_RECEIVERS_PER_NODE + k][j] = 
-			(float)((receiver[k] >> 1) & 0x1F);
-		    if((receiver[k] & 1)){
-			distance[i * NUM_RECEIVERS_PER_NODE + k][j] += 0.5;
+		char data;
+		uint16_t nodeData[NUM_NODES * NUM_EMITTERS];
+		int location[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
+		float distance[NUM_NODES * NUM_RECEIVERS_PER_NODE][NUM_EMITTERS];
+		int closestNode;
+		float closestDistance = 100;
+		int closestEmitter;
+		bool volUp, volDown;
+		// wait til a button is pressed then continue
+		while(!digitalRead(START_PIN) && 
+			!(volUp = digitalRead(VOLUP_PIN)) &&
+			!(volDown = digitalRead(VOLDOWN_PIN))){}
+		// if the volume buttons were pressed do the appropriate operation
+		// and start again from the beginning of the loop
+		if(volUp){
+		    if(vol <= 100){
+				vol += 5;
+				setVolume();
+		    }
+		    continue;
+		}
+		if(volDown){
+		    if(vol >= 0){
+				vol -= 5;
+				setVolume();
+		    }
+		    continue;
+		}
+		// iterate through each node and each emitter
+		// pinging and reading the return data
+		for(data = 0; data < NUM_NODES; data++){
+		    radio.openReadingPipe(1, readPipe[(int)data]);
+		    for(int i = 0; i < NUM_EMITTERS; i++){
+				// send radio signal
+				ping(emitters[i], data);
+				// wait to receive radio signal
+				nodeData[(int)data * NUM_EMITTERS + i] = 
+					receiveData(data);
+		    }
+		    radio.closeReadingPipe(1);
+		}
+		// debugging purposes
+	//	uint16_t testData = 0x0A40;
+	//	for(int i = 0; i < NUM_NODES; i++){
+	//	    for(int j = 0; j < NUM_EMITTERS; j++){
+	//		nodeData[i * NUM_EMITTERS + j] = testData;
+	//		testData += 0x0101;
+	//	    }
+	//	    testData += 0x8080;
+	//	}
+	//	for(int i = 0; i < NUM_NODES * NUM_EMITTERS; i++){
+	//	    bitset<8> x(nodeData[i]);
+	//	    bitset<8> y(nodeData[i] >> 8);
+	//	    cout << y << " | " << x << endl;
+	//	}
+	//	cout << endl;
+		for(int i = 0; i < NUM_NODES; i++){
+		    for(int j = 0; j < NUM_EMITTERS; j++){
+				// take the read data and split it up into two halves
+				// each half corresponds to one of the receivers
+				char receiver[NUM_RECEIVERS_PER_NODE] = 
+				    {((char)(nodeData[i * NUM_EMITTERS + j] >> 8)), 
+				    ((char)(nodeData[i * NUM_EMITTERS + j] & 0xFF))};
+				// take bits 7-6 of each byte as the node ID
+				// take bits 5-1 of each byte as the integer distance
+				// take bit 0 of each byte as the flag for a half increment
+				for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
+				    location[i * NUM_RECEIVERS_PER_NODE + k][j] = 
+						(int)(receiver[k] >> 6);
+				    distance[i * NUM_RECEIVERS_PER_NODE + k][j] = 
+						(float)((receiver[k] >> 1) & 0x1F);
+				    if((receiver[k] & 1)){
+						distance[i * NUM_RECEIVERS_PER_NODE + k][j] += 0.5;
+				    }
+				}
 		    }
 		}
-	    }
-	}
-	// debugging purposes
-//	cout << endl;
-//	for(int i = 0; i < NUM_NODES * NUM_RECEIVERS_PER_NODE; i++){
-//	    for(int j = 0; j < NUM_EMITTERS; j++){
-//		cout << location[i][j] << " | " << distance[i][j] << endl;
-//	    }
-//	}
-	// iterate through all the data and determine the shortest distance
-	// record the distance, node ID, and emitter number of
-	// the closest distance
-	for(int i = 0; i < NUM_NODES * NUM_RECEIVERS_PER_NODE; i++){
-	    for(int j = 0; j < NUM_EMITTERS; j++){
-		if(distance[i][j] < closestDistance){
-		    closestDistance = distance[i][j];
-		    closestNode = location[i][j];
-		    closestEmitter = j + 1;
+		// debugging purposes
+	//	cout << endl;
+	//	for(int i = 0; i < NUM_NODES * NUM_RECEIVERS_PER_NODE; i++){
+	//	    for(int j = 0; j < NUM_EMITTERS; j++){
+	//		cout << location[i][j] << " | " << distance[i][j] << endl;
+	//	    }
+	//	}
+		// iterate through all the data and determine the shortest distance
+		// record the distance, node ID, and emitter number of
+		// the closest distance
+		for(int i = 0; i < NUM_NODES * NUM_RECEIVERS_PER_NODE; i++){
+		    for(int j = 0; j < NUM_EMITTERS; j++){
+				if(distance[i][j] < closestDistance){
+				    closestDistance = distance[i][j];
+				    closestNode = location[i][j];
+				    closestEmitter = j + 1;
+				}
+		    }
 		}
-	    }
-	}
-	// debugging purposes
-//	cout << closestDistance << " " << closestNode << " " << closestEmitter;
-	
-	// emitter numbers 1-2 are on the right side
-	if(closestEmitter < 2){
-	    userFeedback(closestNode, closestDistance, RIGHT);
-	}
-	// emitter numbers 3-4 are on the left side
-	else if(closestEmitter < 5){
-	    userFeedback(closestNode, closestDistance, LEFT);
-	}
-	else{
-	    // closest emitter is 5 so the user is below the node
-	}
+		// debugging purposes
+	//	cout << closestDistance << " " << closestNode << " " << closestEmitter;
+		
+		// emitter numbers 1-2 are on the right side
+		if(closestEmitter < 2){
+		    userFeedback(closestNode, closestDistance, RIGHT);
+		}
+		// emitter numbers 3-4 are on the left side
+		else if(closestEmitter < 5){
+		    userFeedback(closestNode, closestDistance, LEFT);
+		}
+		else{
+		    // closest emitter is 5 so the user is below the node
+		}
     }
 
     return (EXIT_SUCCESS);

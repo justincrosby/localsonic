@@ -10,10 +10,6 @@
 #ifndef SOUNDS_H
 #define	SOUNDS_H
 
-#ifdef	__cplusplus
-extern "C" {
-#endif
-
 // sounds for distance measurement
 #define NUM_SOUNDS 6
 // "zero"
@@ -43,13 +39,9 @@ extern "C" {
     
     // each beacon will be given an ID which corresponds to its location
     // in the map string array
-    const char sounds[NUM_SOUNDS][50] = {SOUND_0, SOUND_1, SOUND_2, SOUND_3, 
+    const char sounds[NUM_SOUNDS][] = {SOUND_0, SOUND_1, SOUND_2, SOUND_3, 
 	SOUND_4, SOUND_5};
-    const char lr[2][50] = {LEFT_SOUND, RIGHT_SOUND};
-
-#ifdef	__cplusplus
-}
-#endif
+    const char lr[2][] = {LEFT_SOUND, RIGHT_SOUND};
 
 #endif	/* SOUNDS_H */
 

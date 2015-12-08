@@ -6,12 +6,20 @@
  */
 
 #ifndef DEFS_H
-#define	DEFS_H
+#define DEFS_H
 
-#define RECEIVE_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
 #define NANOSECONDS_PER_SECOND 1E9
 #define NUM_SAMPLES 10
-#define NUM_EMITTERS 5
-#define NUM_RECEIVERS_PER_NODE 2
+#define NUM_EMITTERS 1
+#define NUM_RECEIVERS_PER_NODE 3
+#define CODE 0xAC
 
-#endif	/* DEFS_H */
+inline double timeDifference(struct timespec startTime)
+{
+    struct timespec endTime;
+    clock_gettime(CLOCK_REALTIME, &endTime);
+    return (double)(endTime.tv_sec - startTime.tv_sec) * 1000000000.0
+         + (double)(endTime.tv_nsec - startTime.tv_nsec);
+}
+
+#endif  /* DEFS_H */

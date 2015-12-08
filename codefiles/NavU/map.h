@@ -8,16 +8,15 @@
  */
 
 #ifndef MAP_H
-#define	MAP_H
+#define MAP_H
 
 #define NUM_LOCATIONS 3
 #define LOCATION_0 "/root/test.wav"
 #define LOCATION_1 "/root/volume.wav"
 #define LOCATION_2 "/root/volume.wav"
     
-    // each beacon will be given an ID which corresponds to its location
-    // in the map string array
-    const char map[NUM_LOCATIONS][] = {LOCATION_0, LOCATION_1, LOCATION_2};
+// each beacon will be given an ID which corresponds to its location
+// in the map string array
+const char map[NUM_LOCATIONS][50] = {LOCATION_0, LOCATION_1, LOCATION_2};
 
-#endif	/* MAP_H */
-
+#endif  /* MAP_H */

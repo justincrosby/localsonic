@@ -27,6 +27,7 @@
 #include <wiringPi.h>
 #include <time.h>
 #include <iostream>
+#include <bitset>
 #include "/home/pi/rf24libs/RF24/RF24.h"
 
 #include "map.h"
@@ -38,7 +39,7 @@ using namespace std;
 #define START_PIN 1
 #define VOLUP_PIN 8
 #define VOLDOWN_PIN 9
-#define EMITTER_1 7
+#define EMITTER_1 0
 #define EMITTER_2 2
 #define EMITTER_3 3
 #define EMITTER_4 4
@@ -47,9 +48,9 @@ using namespace std;
 #define NUM_CYCLES 200
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
-#define NUM_NODES 1
+#define NUM_NODES 2
 // delay between pings in milliseconds
-#define SAMPLE_DELAY 500
+#define SAMPLE_DELAY 40
 // radio receive timeout in nanoseconds
 #define RADIO_RECEIVE_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
 // radio send timeout in milliseconds
@@ -98,11 +99,11 @@ inline char receiveData(char nodeNum){
     while(!radio.available()){
         // after the timeout period give up and set the
         // packet to the max distance
-        if(timeDifference(startTime) >= RADIO_RECEIVE_TIMEOUT){
-            radio.stopListening();
-            data = 0xFF;
-            return data;
-        }
+//        if(timeDifference(startTime) >= RADIO_RECEIVE_TIMEOUT){
+//            radio.stopListening();
+//            data = 0xFF;
+//            return data;
+//        }
     }
     // if we've made it here there is data to be read
     radio.read(&data, sizeof(data));
@@ -163,19 +164,18 @@ int main(int argc, char** argv) {
     // initial wiringPi setup, run once
     wiringPiSetup();
     pinMode(EMITTER_1, OUTPUT);
-    pinMode(EMITTER_2, OUTPUT);
-    pinMode(EMITTER_3, OUTPUT);
-    pinMode(EMITTER_4, OUTPUT);
-    pinMode(EMITTER_5, OUTPUT);
-    pinMode(START_PIN, INPUT);
-    pinMode(VOLUP_PIN, INPUT);
-    pinMode(VOLDOWN_PIN, INPUT);
+//    pinMode(EMITTER_2, OUTPUT);
+//    pinMode(EMITTER_3, OUTPUT);
+//    pinMode(EMITTER_4, OUTPUT);
+//    pinMode(EMITTER_5, OUTPUT);
+//    pinMode(START_PIN, INPUT);
+//    pinMode(VOLUP_PIN, INPUT);
+//    pinMode(VOLDOWN_PIN, INPUT);
     // set initial volume level
-    setVolume();
+//    setVolume();
     // setup radio    
     radio.begin();
-    
-    while(1){
+//    while(1){
         char nodeData[NUM_NODES][NUM_EMITTERS][NUM_RECEIVERS_PER_NODE];
         int location[NUM_NODES][NUM_EMITTERS][NUM_RECEIVERS_PER_NODE];
         float distance[NUM_NODES][NUM_EMITTERS][NUM_RECEIVERS_PER_NODE];
@@ -184,25 +184,25 @@ int main(int argc, char** argv) {
         int closestEmitter;
         bool volUp, volDown;
         // wait til a button is pressed then continue
-        while(!digitalRead(START_PIN) && 
-             !(volUp = digitalRead(VOLUP_PIN)) &&
-             !(volDown = digitalRead(VOLDOWN_PIN))){}
-        // if the volume buttons were pressed do the appropriate operation
-        // and start again from the beginning of the loop
-        if(volUp){
-            if(vol <= 100){
-                vol += 5;
-                setVolume();
-            }
-             continue;
-        }
-        if(volDown){
-            if(vol >= 0){
-                vol -= 5;
-                setVolume();
-            }
-            continue;
-        }
+//        while(!digitalRead(START_PIN) && 
+//             !(volUp = digitalRead(VOLUP_PIN)) &&
+//             !(volDown = digitalRead(VOLDOWN_PIN))){}
+//        // if the volume buttons were pressed do the appropriate operation
+//        // and start again from the beginning of the loop
+//        if(volUp){
+//            if(vol <= 100){
+//                vol += 5;
+//                setVolume();
+//            }
+//             continue;
+//        }
+//        if(volDown){
+//            if(vol >= 0){
+//                vol -= 5;
+//                setVolume();
+//            }
+//            continue;
+//        }
         // iterate through each node and each emitter
         // pinging each receiver NUM_SAMPLES times each
         for(int i = 0; i < NUM_NODES; i++){
@@ -211,15 +211,9 @@ int main(int argc, char** argv) {
                 for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
                     // send ping signal
                     ping(emitters[j]);
-                }
-            }
-        }
-        // grab the data from each node now
-        for(int i = 0; i < NUM_NODES; i++){
-            for(int j = 0; j < NUM_EMITTERS; j++){
-                for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
                     // wait to receive radio signal
                     nodeData[i][j][k] = receiveData(i);
+                    //cout << bitset<8>(nodeData[i][j][k]) << endl;
                 }
             }
         }
@@ -269,6 +263,6 @@ int main(int argc, char** argv) {
             // closest emitter is 5 so the user is below the node
             // what do we do here?
         }
-    }
+//    }
     return (EXIT_SUCCESS);
 }

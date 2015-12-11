@@ -24,11 +24,11 @@ using namespace std;
 #define NODE_ID 0
 
 // eliminate the large outliers
-#define TOLERANCE_1 0.3
+#define TOLERANCE_1 0.25
 // eliminate the smaller outliers
-#define TOLERANCE_2 0.15
+#define TOLERANCE_2 0.1
 #define SPEED_OF_SOUND 340
-// we have 6 bits for distance measurement 0x3F = 31.5
+// we have 4 bits for distance measurement 0xF = 15.5
 #define MAX_DISTANCE 15.5
 // ~20m
 #define MAX_TIME 59000000
@@ -37,21 +37,21 @@ using namespace std;
 // radio timeout in nanoseconds
 #define RADIO_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
 // ultrasonic receiver timeout in nanoseconds
-#define RECEIVE_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
+#define RECEIVE_TIMEOUT (MAX_DISTANCE / SPEED_OF_SOUND * NANOSECONDS_PER_SECOND)
 
 // GLOBAL VARIABLES
 RF24 radio(22,0);
 const uint8_t readPipe[2][6] = {"1Pipe", "2Pipe"};
 const uint8_t writePipe[2][6] = {"3Pipe", "4Pipe"};
-const int receiverIDs[NUM_RECEIVERS_PER_NODE] = {RECEIVER_1_ID, RECEIVER_2_ID, RECEIVER_3_ID};
-const int receiverPins[NUM_RECEIVERS_PER_NODE] = {RX_PIN_1, RX_PIN_2, RX_PIN_3};
+const int receiverIDs[NUM_RECEIVERS_PER_NODE] = {RECEIVER_1_ID, RECEIVER_2_ID};
+const int receiverPins[NUM_RECEIVERS_PER_NODE] = {RX_PIN_1, RX_PIN_2};
 
 int main(int argc, char** argv) {
     // initial wiringPi setup, run once
     wiringPiSetup();
     pinMode(RX_PIN_1, INPUT);
     pinMode(RX_PIN_2, INPUT);
-    pinMode(RX_PIN_3, INPUT);
+    //pinMode(RX_PIN_3, INPUT);
 
     radio.begin();
     // beacons use static reading and writing pipes, open once
@@ -62,16 +62,13 @@ int main(int argc, char** argv) {
         struct timespec startTime;
         long int times[NUM_RECEIVERS_PER_NODE][NUM_SAMPLES];
         float distance[NUM_RECEIVERS_PER_NODE];
-        char sendData[NUM_RECEIVERS_PER_NODE];
         int intpart;
         float decpart;
         // need to initialize sendData since it'll be bitwise or'd
-        for(int i = 0; i < NUM_RECEIVERS_PER_NODE; i++){
-            sendData[i] = 0;
-        }
-        radio.startListening();
         // iterate through each receiver with NUM_SAMPLES per receiver
         for(int i = 0; i < NUM_RECEIVERS_PER_NODE; i++){
+            radio.startListening();
+            char sendData = 0;
             for(int j = 0; j < NUM_SAMPLES; j++){
                 // wait for a radio transmission
                 clock_gettime(CLOCK_REALTIME, &startTime);
@@ -95,7 +92,7 @@ int main(int argc, char** argv) {
                 clock_gettime(CLOCK_REALTIME, &startTime);
                 // wait for the US receiver to detect a signal
                 while(!digitalRead(receiverPins[i])){
-                    // if we hit the timeout period set both of the times for this transmission to 0
+                    // if we hit the timeout period set the time for this transmission to 0
                     // that way we know that the receiver did not receive anything
                     if(timeDifference(startTime) >= RECEIVE_TIMEOUT){
                         times[i][j] = 0;
@@ -109,10 +106,8 @@ int main(int argc, char** argv) {
                 end:
                 continue;
             }
-        }
-        radio.stopListening();
-        // iterate through each receiver getting the average time of flight
-        for(int i = 0; i < NUM_RECEIVERS_PER_NODE; i++){
+            radio.stopListening();
+            
             float avgTol = 0;
             float average = 0;
             int numSamples = 0;
@@ -129,7 +124,7 @@ int main(int argc, char** argv) {
             // the emitter must be far away
             if(numSamples == 0){
                 distance[i] = MAX_DISTANCE;
-                continue;
+                goto distance;
             }
             avgTol = average/numSamples;
             average = 0;
@@ -145,7 +140,7 @@ int main(int argc, char** argv) {
             }
             if(numSamples == 0){
                 distance[i] = MAX_DISTANCE;
-                continue;
+                goto distance;
             }
             avgTol = average/numSamples;
             average = 0;
@@ -161,35 +156,31 @@ int main(int argc, char** argv) {
             }
             if(numSamples == 0){
                 distance[i] = MAX_DISTANCE;
-                continue;
+                goto distance;
             }
             distance[i] = average / numSamples / 
                 NANOSECONDS_PER_SECOND * SPEED_OF_SOUND;
-
+            // format a packet of data to send back to the NavU
+            // each receiver needs 8 bits of data transmitted
+            distance:
             cout << "distance :" << distance[i] << endl;
-        }
-        // format a packet of data to send back to the NavU
-        // each receiver needs 8 bits of data transmitted
-        for(int i = 0; i < NUM_RECEIVERS_PER_NODE; i++){
-            // first 2 bits are the receiver ID
-            sendData[i] |= receiverIDs[i];
+            // first 3 bits are the receiver ID
+            sendData |= receiverIDs[i];
             intpart = (int)distance[i];
             decpart = distance[i] - intpart;
             if(decpart > 0.75){
                 intpart++;
             }
             // next 4 bits are the integer part of the distance
-            sendData[i] <<= 4;
-            sendData[i] |= intpart;
+            sendData <<= 4;
+            sendData |= intpart;
             // last bit is a flag for a half increment
-            sendData[i] <<= 1;
+            sendData <<= 1;
             if(decpart < 0.75 && decpart > 0.25){
-                sendData[i] |= 1;
+                sendData |= 1;
             }
-        }
-        for(int i = 0; i < NUM_RECEIVERS_PER_NODE; i++){
-            radio.writeBlocking(&sendData[i], sizeof(sendData[i]), 1000);
-            radio.txStandBy(1000);
+            radio.writeBlocking(&sendData, sizeof(sendData), 2000);
+            radio.txStandBy(2000);
         }
     }
     return 0;

@@ -13,6 +13,8 @@
 #define NUM_EMITTERS 5
 #define NUM_RECEIVERS_PER_NODE 1
 #define CODE 0xAC
+// we have 4 bits for distance measurement 0xF = 15.5
+#define MAX_DISTANCE 15.5
 
 inline double timeDifference(struct timespec startTime)
 {

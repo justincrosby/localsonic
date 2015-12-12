@@ -27,7 +27,6 @@
 #include <wiringPi.h>
 #include <time.h>
 #include <iostream>
-#include <bitset>
 #include "/home/pi/rf24libs/RF24/RF24.h"
 
 #include "map.h"
@@ -35,10 +34,11 @@
 #include "defs.h"
 
 using namespace std;
-// these are arbitrary assignments for now
+
 #define START_PIN 7
 #define VOLUP_PIN 9
 #define VOLDOWN_PIN 8
+// emitter 1 should be the front, 2 the right, 3 the back, etc
 #define EMITTER_1 0
 #define EMITTER_2 2
 #define EMITTER_3 1
@@ -48,6 +48,7 @@ using namespace std;
 #define NUM_CYCLES 200
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
+// total beacons in the system
 #define NUM_NODES 1
 // delay between pings in milliseconds
 #define SAMPLE_DELAY 40
@@ -58,7 +59,7 @@ using namespace std;
 
 // GLOBAL VARIABLES
 // default volume is 80%
-int vol = 90;
+int vol = 80;
 RF24 radio(22,0);
 const uint8_t writePipe[2][6] = {"1Pipe", "2Pipe"};
 const uint8_t readPipe[2][6] = {"3Pipe", "4Pipe"};
@@ -85,9 +86,9 @@ inline void ping(int emitterNum){
         delay(SAMPLE_DELAY);
     }
 }
-inline char receiveData(char nodeNum){
+inline uint16_t receiveData(int nodeNum){
     struct timespec startTime;
-    char data;
+    uint16_t data;
     // listen on the specified reading pipe
     radio.openReadingPipe(1,readPipe[nodeNum]);
     radio.startListening();
@@ -97,7 +98,7 @@ inline char receiveData(char nodeNum){
         // packet to the max distance
         if(timeDifference(startTime) >= RADIO_RECEIVE_TIMEOUT){
             radio.stopListening();
-            data = 0xFF;
+            data = 0xFFFF;
             return data;
         }
     }
@@ -157,7 +158,7 @@ void userFeedback(int location, float distance, int orientation){
             playAudio(intSounds[intpart]);
         }
     }
-    // direction: left or right
+    // direction: ahead, right, behind, left
     playAudio(direction[orientation]);
 }
 int main(int argc, char** argv) {
@@ -173,16 +174,15 @@ int main(int argc, char** argv) {
     pinMode(VOLDOWN_PIN, INPUT);
     // set initial volume level
     setVolume();
-//    userFeedback(3, 0.5, 3);
-//    return 0;
-    // setup radio    
+ 
     radio.begin();
 //    while(1){
-        char nodeData[NUM_NODES][NUM_EMITTERS][NUM_RECEIVERS_PER_NODE];
-        int location[NUM_NODES][NUM_EMITTERS][NUM_RECEIVERS_PER_NODE];
-        float distance[NUM_NODES][NUM_EMITTERS][NUM_RECEIVERS_PER_NODE];
+        uint16_t nodeData[NUM_NODES];
+        int location[NUM_NODES];
+        float distance[NUM_NODES];
+        int emitter[NUM_NODES];
         int closestNode;
-        float closestDistance = 100;
+        float closestDistance = MAX_DISTANCE;
         int closestEmitter;
         bool volUp, volDown;
         // wait til a button is pressed then continue
@@ -209,49 +209,39 @@ int main(int argc, char** argv) {
         // pinging each receiver NUM_SAMPLES times each
         for(int i = 0; i < NUM_NODES; i++){
             radio.openWritingPipe(writePipe[i]);
-            for(int j = 0; j < NUM_EMITTERS; j++){
-                for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
+            for(int j = 0; j < NUM_RECEIVERS_PER_NODE; j++){
+                for(int k = 0; k < NUM_EMITTERS; k++){
                     // send ping signal
-                    ping(emitters[j]);
-                    // wait to receive radio signal
-                    nodeData[i][j][k] = receiveData(i);
-                    //cout << bitset<8>(nodeData[i][j][k]) << endl;
+                    ping(emitters[k]);
                 }
             }
+            // wait to receive radio signal
+            nodeData[i] = receiveData(i);
         }
         // take the data received and interpret it
         for(int i = 0; i < NUM_NODES; i++){
-            for(int j = 0; j < NUM_EMITTERS; j++){
-                // take bits 7-5 of each byte as the node ID
-                // take bits 4-1 of each byte as the integer distance
-                // take bit 0 of each byte as the flag for a half increment
-                for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
-                    location[i][j][k] = 
-                        (int)(nodeData[i][j][k] >> 5);
-                    distance[i][j][k] = 
-                        (float)((nodeData[i][j][k] >> 1) & 0xF);
-                    if((nodeData[i][j][k] & 1)){
-                        distance[i][j][k] += 0.5;
-                    }
-                }
+            // take bits 10-8 of each byte as the node ID
+            // take bits 7-5 as the emitter number
+            // take bits 4-1 of each byte as the integer distance
+            // take bit 0 of each byte as the flag for a half increment
+            location[i] = (int)(nodeData[i] >> 8);
+            emitter[i] = (int)((nodeData[i] >> 5) & 0x7);
+            distance[i] = (float)((nodeData[i] >> 1) & 0xF);
+            if((nodeData[i] & 1)){
+                distance[i] += 0.5;
             }
         }
         // iterate through all the data and determine the shortest distance
         // record the distance, node ID, and emitter number of
         // the closest distance
         for(int i = 0; i < NUM_NODES; i++){
-            for(int j = 0; j < NUM_EMITTERS; j++){
-                for(int k = 0; k < NUM_RECEIVERS_PER_NODE; k++){
-                    cout << distance[i][j][k] << endl;
-                    if(distance[i][j][k] < closestDistance){
-                        closestDistance = distance[i][j][k];
-                        closestNode = location[i][j][k];
-                        closestEmitter = j;
-                    }
-                }
+            if(distance[i] < closestDistance){
+                closestDistance = distance[i];
+                closestEmitter = emitters[i];
+                closestNode = location[i]; 
             }
         }
-        // remove when testing audio feedback
+        // output the closest node to the user via audio feedback
         userFeedback(closestNode, closestDistance, closestEmitter);
     //}
     return (EXIT_SUCCESS);

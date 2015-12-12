@@ -36,33 +36,29 @@
 
 using namespace std;
 // these are arbitrary assignments for now
-#define START_PIN 1
-#define VOLUP_PIN 8
-#define VOLDOWN_PIN 9
+#define START_PIN 7
+#define VOLUP_PIN 9
+#define VOLDOWN_PIN 8
 #define EMITTER_1 0
 #define EMITTER_2 2
-#define EMITTER_3 3
+#define EMITTER_3 1
 #define EMITTER_4 4
 #define EMITTER_5 5
 // number of periods to emit ultrasonic
 #define NUM_CYCLES 200
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
-#define NUM_NODES 2
+#define NUM_NODES 1
 // delay between pings in milliseconds
 #define SAMPLE_DELAY 40
 // radio receive timeout in nanoseconds
-#define RADIO_RECEIVE_TIMEOUT (0.5 * NANOSECONDS_PER_SECOND)
+#define RADIO_RECEIVE_TIMEOUT (1 * NANOSECONDS_PER_SECOND)
 // radio send timeout in milliseconds
 #define RADIO_SEND_TIMEOUT 500
-#define LEFT 0
-#define RIGHT 1
-
-
 
 // GLOBAL VARIABLES
 // default volume is 80%
-int vol = 80;
+int vol = 90;
 RF24 radio(22,0);
 const uint8_t writePipe[2][6] = {"1Pipe", "2Pipe"};
 const uint8_t readPipe[2][6] = {"3Pipe", "4Pipe"};
@@ -99,11 +95,11 @@ inline char receiveData(char nodeNum){
     while(!radio.available()){
         // after the timeout period give up and set the
         // packet to the max distance
-//        if(timeDifference(startTime) >= RADIO_RECEIVE_TIMEOUT){
-//            radio.stopListening();
-//            data = 0xFF;
-//            return data;
-//        }
+        if(timeDifference(startTime) >= RADIO_RECEIVE_TIMEOUT){
+            radio.stopListening();
+            data = 0xFF;
+            return data;
+        }
     }
     // if we've made it here there is data to be read
     radio.read(&data, sizeof(data));
@@ -133,7 +129,7 @@ void setVolume(){
     // play volume sound to acknowledge volume change
     playAudio(VOLUME_SOUND);
 }
-void userFeedback(int location, float distance, int direction){
+void userFeedback(int location, float distance, int orientation){
     // play a sequence of files that give the user their location
     // i.e. "<location> is <distance> to your <direction>
     // location is given as a unique integer value which maps to a
@@ -150,29 +146,35 @@ void userFeedback(int location, float distance, int direction){
     // connecting words
     playAudio(IS_SOUND);
     // play distance
-    playAudio(sounds[intpart]);
-    // if there's a decimal part play it
-    if(decpart != 0){
-        playAudio(SOUND_05);
+    if(distance > 5){
+        playAudio(intSounds[5]);
     }
-    // connecting words
-    playAudio(TOYOUR_SOUND);
+    else{
+        if(decpart != 0){
+            playAudio(decSounds[intpart]);
+        }
+        else{
+            playAudio(intSounds[intpart]);
+        }
+    }
     // direction: left or right
-    playAudio(lr[direction]);
+    playAudio(direction[orientation]);
 }
 int main(int argc, char** argv) {
     // initial wiringPi setup, run once
     wiringPiSetup();
     pinMode(EMITTER_1, OUTPUT);
-//    pinMode(EMITTER_2, OUTPUT);
-//    pinMode(EMITTER_3, OUTPUT);
-//    pinMode(EMITTER_4, OUTPUT);
-//    pinMode(EMITTER_5, OUTPUT);
-//    pinMode(START_PIN, INPUT);
-//    pinMode(VOLUP_PIN, INPUT);
-//    pinMode(VOLDOWN_PIN, INPUT);
+    pinMode(EMITTER_2, OUTPUT);
+    pinMode(EMITTER_3, OUTPUT);
+    pinMode(EMITTER_4, OUTPUT);
+    pinMode(EMITTER_5, OUTPUT);
+    pinMode(START_PIN, INPUT);
+    pinMode(VOLUP_PIN, INPUT);
+    pinMode(VOLDOWN_PIN, INPUT);
     // set initial volume level
-//    setVolume();
+    setVolume();
+//    userFeedback(3, 0.5, 3);
+//    return 0;
     // setup radio    
     radio.begin();
 //    while(1){
@@ -244,25 +246,13 @@ int main(int argc, char** argv) {
                     if(distance[i][j][k] < closestDistance){
                         closestDistance = distance[i][j][k];
                         closestNode = location[i][j][k];
-                        closestEmitter = j + 1;
+                        closestEmitter = j;
                     }
                 }
             }
         }
         // remove when testing audio feedback
-        return 0;
-        // emitter numbers 1-2 are on the right side
-        if(closestEmitter < 2){
-            userFeedback(closestNode, closestDistance, RIGHT);
-        }
-        // emitter numbers 3-4 are on the left side
-        else if(closestEmitter < 5){
-            userFeedback(closestNode, closestDistance, LEFT);
-        }
-        else{
-            // closest emitter is 5 so the user is below the node
-            // what do we do here?
-        }
-//    }
+        userFeedback(closestNode, closestDistance, closestEmitter);
+    //}
     return (EXIT_SUCCESS);
 }

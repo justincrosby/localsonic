@@ -10,8 +10,8 @@
 
 #define NANOSECONDS_PER_SECOND 1E9
 #define NUM_SAMPLES 5
-#define NUM_EMITTERS 1
-#define NUM_RECEIVERS_PER_NODE 2
+#define NUM_EMITTERS 5
+#define NUM_RECEIVERS_PER_NODE 1
 #define CODE 0xAC
 
 inline double timeDifference(struct timespec startTime)

@@ -15,7 +15,7 @@
 
 using namespace std;
 
-#define RX_PIN_1 0
+#define RX_PIN_1 2
 #define RX_PIN_2 1
 #define RX_PIN_3 2
 #define RECEIVER_1_ID 0
@@ -43,15 +43,15 @@ using namespace std;
 RF24 radio(22,0);
 const uint8_t readPipe[2][6] = {"1Pipe", "2Pipe"};
 const uint8_t writePipe[2][6] = {"3Pipe", "4Pipe"};
-const int receiverIDs[NUM_RECEIVERS_PER_NODE] = {RECEIVER_1_ID, RECEIVER_2_ID};
-const int receiverPins[NUM_RECEIVERS_PER_NODE] = {RX_PIN_1, RX_PIN_2};
+const int receiverIDs[NUM_RECEIVERS_PER_NODE] = {RECEIVER_1_ID};
+const int receiverPins[NUM_RECEIVERS_PER_NODE] = {RX_PIN_1};
 
 int main(int argc, char** argv) {
     // initial wiringPi setup, run once
     wiringPiSetup();
     pinMode(RX_PIN_1, INPUT);
     pinMode(RX_PIN_2, INPUT);
-    //pinMode(RX_PIN_3, INPUT);
+    pinMode(RX_PIN_3, INPUT);
 
     radio.begin();
     // beacons use static reading and writing pipes, open once

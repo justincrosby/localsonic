@@ -9,6 +9,7 @@
 #include <wiringPi.h>
 #include <time.h>
 #include <iostream>
+#include <math.h>
 
 #include "/home/pi/rf24libs/RF24/RF24.h"
 #include "defs.h"
@@ -18,9 +19,13 @@ using namespace std;
 #define RX_PIN_1 0
 #define RX_PIN_2 1
 #define RX_PIN_3 2
+#define RX_PIN_4 4
+#define RX_PIN_5 21
 #define RECEIVER_1_ID 0
 #define RECEIVER_2_ID 1
 #define RECEIVER_3_ID 2
+#define RECEIVER_4_ID 3
+#define RECEIVER_5_ID 4
 #define NODE_ID 0
 
 // eliminate the large outliers
@@ -38,13 +43,14 @@ using namespace std;
 #define RADIO_SEND_TIMEOUT 2000
 // ultrasonic receiver timeout in nanoseconds
 #define ULTRASONIC_RECEIVE_TIMEOUT (MAX_DISTANCE / SPEED_OF_SOUND * NANOSECONDS_PER_SECOND)
+#define USER_HEIGHT 1
 
 // GLOBAL VARIABLES
 RF24 radio(22,0);
 const uint8_t readPipe[2][6] = {"1Pipe", "2Pipe"};
 const uint8_t writePipe[2][6] = {"3Pipe", "4Pipe"};
-const int receiverIDs[3] = {RECEIVER_1_ID, RECEIVER_2_ID, RECEIVER_3_ID};
-const int receiverPins[3] = {RX_PIN_1, RX_PIN_2, RX_PIN_3};
+const int receiverIDs[5] = {RECEIVER_1_ID, RECEIVER_2_ID, RECEIVER_3_ID, RECEIVER_4_ID, RECEIVER_5_ID};
+const int receiverPins[5] = {RX_PIN_1, RX_PIN_2, RX_PIN_3, RX_PIN_4, RX_PIN_5};
 
 int main(int argc, char** argv) {
     // initial wiringPi setup, run once
@@ -52,6 +58,8 @@ int main(int argc, char** argv) {
     pinMode(RX_PIN_1, INPUT);
     pinMode(RX_PIN_2, INPUT);
     pinMode(RX_PIN_3, INPUT);
+    pinMode(RX_PIN_4, INPUT);
+    pinMode(RX_PIN_5, INPUT);
 
     radio.begin();
     // beacons use static reading and writing pipes, open once
@@ -65,9 +73,10 @@ int main(int argc, char** argv) {
         // set initial values for these in case no emitters are close
         float closestDistance = MAX_DISTANCE;
         int closestEmitter = 0;
+        int closestReceiver = 0;
         int intpart;
         float decpart;
-
+        
         radio.startListening();
         // need to initialize sendData since it'll be or'd
         uint16_t sendData = 0;
@@ -120,7 +129,7 @@ int main(int argc, char** argv) {
                 float average = 0;
                 int numSamples = 0;
                 for(int k = 0; k < NUM_SAMPLES; k++){
-                    cout << "times " << times[i][j][k] << endl;
+                    //cout << "times " << times[i][j][k] << endl;
                     // add samples to the average as long as they aren't too close
                     // or too far away to be possible
                     if(times[i][j][k] > MIN_TIME && times[i][j][k] < MAX_TIME){
@@ -131,7 +140,7 @@ int main(int argc, char** argv) {
                 // if we don't get any samples within the possible range
                 // the emitter must be far away
                 if(numSamples == 0){
-                    cout << "distance : 15.5" << endl;
+                    //cout << "receiver " << i << " emitter " << j << " distance : 15.5" << endl;
                     continue;
                 }
                 avgTol = average/numSamples;
@@ -147,7 +156,7 @@ int main(int argc, char** argv) {
                     }
                 }
                 if(numSamples == 0){
-                    cout << "distance : 15.5" << endl;
+                    //cout << "receiver " << i << " emitter " << j << " distance : 15.5" << endl;
                     continue;
                 }
                 avgTol = average/numSamples;
@@ -163,7 +172,7 @@ int main(int argc, char** argv) {
                     }
                 }
                 if(numSamples == 0){
-                    cout << "distance : 15.5" << endl;
+                    //cout << "receiver " << i << " emitter " << j << " distance : 15.5" << endl;
                     continue;
                 }
                 distance = average / numSamples / 
@@ -172,14 +181,24 @@ int main(int argc, char** argv) {
                 if(distance < closestDistance){
                     closestDistance = distance;
                     closestEmitter = j;
+                    closestReceiver = i;
+                    //cout << closestDistance << " " << closestEmitter << " " << closestReceiver << endl;
                 }
-                cout << "distance :" << distance << endl;
+                //cout << "receiver " << i << " emitter " << j << " distance :" << distance << endl;
             }
         }
+        if(closestDistance == MAX_DISTANCE){
+            sendData = 0xFFFF;
+            radio.writeBlocking(&sendData, sizeof(sendData), RADIO_SEND_TIMEOUT);
+            radio.txStandBy(RADIO_SEND_TIMEOUT);
+            continue;
+        }
+        // calculate the horizontal distance
+        closestDistance = sqrt(pow(closestDistance, 2) - pow(USER_HEIGHT, 2));
         // format a packet of data to send back to the NavU
         // send 16 bits of data
         // first 3 bits are the receiver ID
-        sendData |= receiverIDs[closestEmitter];
+        sendData |= receiverIDs[closestReceiver];
         // next 3 bits are the emitter number
         sendData <<= 3;
         sendData |= closestEmitter;

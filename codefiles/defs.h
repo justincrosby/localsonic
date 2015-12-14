@@ -11,7 +11,7 @@
 #define NANOSECONDS_PER_SECOND 1E9
 #define NUM_SAMPLES 5
 #define NUM_EMITTERS 5
-#define NUM_RECEIVERS_PER_NODE 1
+#define NUM_RECEIVERS_PER_NODE 5
 #define CODE 0xAC
 // we have 4 bits for distance measurement 0xF = 15.5
 #define MAX_DISTANCE 15.5

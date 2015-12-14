@@ -27,6 +27,7 @@
 #include <wiringPi.h>
 #include <time.h>
 #include <iostream>
+#include <bitset>
 #include "/home/pi/rf24libs/RF24/RF24.h"
 
 #include "map.h"
@@ -36,16 +37,16 @@
 using namespace std;
 
 #define START_PIN 7
-#define VOLUP_PIN 9
-#define VOLDOWN_PIN 8
+#define VOLUP_PIN 21
+#define VOLDOWN_PIN 22
 // emitter 1 should be the front, 2 the right, 3 the back, etc
 #define EMITTER_1 0
-#define EMITTER_2 2
+#define EMITTER_2 4
 #define EMITTER_3 1
-#define EMITTER_4 4
+#define EMITTER_4 6
 #define EMITTER_5 5
 // number of periods to emit ultrasonic
-#define NUM_CYCLES 200
+#define NUM_CYCLES 150
 // period in microseconds (25 is 40kHz)
 #define PERIOD 25
 // total beacons in the system
@@ -53,7 +54,7 @@ using namespace std;
 // delay between pings in milliseconds
 #define SAMPLE_DELAY 40
 // radio receive timeout in nanoseconds
-#define RADIO_RECEIVE_TIMEOUT (1 * NANOSECONDS_PER_SECOND)
+#define RADIO_RECEIVE_TIMEOUT (5 * NANOSECONDS_PER_SECOND)
 // radio send timeout in milliseconds
 #define RADIO_SEND_TIMEOUT 500
 
@@ -63,7 +64,7 @@ int vol = 80;
 RF24 radio(22,0);
 const uint8_t writePipe[2][6] = {"1Pipe", "2Pipe"};
 const uint8_t readPipe[2][6] = {"3Pipe", "4Pipe"};
-const int emitters[5] = {EMITTER_1, EMITTER_2, EMITTER_3, EMITTER_4, EMITTER_5};
+const int emitterPins[5] = {EMITTER_1, EMITTER_2, EMITTER_3, EMITTER_4, EMITTER_5};
 // inline function so that the compiler does inline expansion
 // need to be as fast as possible, normal function calls take too long
 inline void ping(int emitterNum){
@@ -141,25 +142,46 @@ void userFeedback(int location, float distance, int orientation){
     // do some calculations first - need to play the sounds quickly
     int intpart = (int)distance;
     float decpart = distance - intpart;
-    
-    // location name first
-    playAudio(map[location]);
-    // connecting words
-    playAudio(IS_SOUND);
-    // play distance
-    if(distance > 5){
-        playAudio(intSounds[5]);
-    }
-    else{
-        if(decpart != 0){
-            playAudio(decSounds[intpart]);
+    if(orientation == 4){
+        playAudio(AT_SOUND);
+        // location name first
+        if(location > 5){
+            playAudio(map[0]);
         }
         else{
-            playAudio(intSounds[intpart]);
+            playAudio(map[location]);
         }
     }
-    // direction: ahead, right, behind, left
-    playAudio(direction[orientation]);
+    else{
+        // location name first
+        if(location > 5){
+            playAudio(map[0]);
+        }
+        else{
+            playAudio(map[location]);
+        }
+        // connecting words
+        playAudio(IS_SOUND);
+        // play distance
+        if(distance > 5){
+            playAudio(intSounds[5]);
+        }
+        else{
+            if(decpart != 0){
+                playAudio(decSounds[intpart]);
+            }
+            else{
+                playAudio(intSounds[intpart]);
+            }
+        }
+        // direction: ahead, right, behind, left
+        if(orientation > 3){
+            playAudio(direction[0]);
+        }
+        else{
+            playAudio(direction[orientation]);
+        }
+    }
 }
 int main(int argc, char** argv) {
     // initial wiringPi setup, run once
@@ -173,10 +195,19 @@ int main(int argc, char** argv) {
     pinMode(VOLUP_PIN, INPUT);
     pinMode(VOLDOWN_PIN, INPUT);
     // set initial volume level
-    setVolume();
- 
-    radio.begin();
 //    while(1){
+//        digitalWrite(EMITTER_4, LOW);
+//        delayMicroseconds(PERIOD/2);
+//        digitalWrite(EMITTER_4, HIGH);
+//        delayMicroseconds(PERIOD/2);
+//    }
+
+    setVolume();
+    setVolume();
+    playAudio(WELCOME_SOUND);
+    
+    radio.begin();
+    while(1){
         uint16_t nodeData[NUM_NODES];
         int location[NUM_NODES];
         float distance[NUM_NODES];
@@ -184,27 +215,29 @@ int main(int argc, char** argv) {
         int closestNode;
         float closestDistance = MAX_DISTANCE;
         int closestEmitter;
+        int error = 0;
         bool volUp, volDown;
         // wait til a button is pressed then continue
-//        while(!digitalRead(START_PIN) && 
-//             !(volUp = digitalRead(VOLUP_PIN)) &&
-//             !(volDown = digitalRead(VOLDOWN_PIN))){}
-//        // if the volume buttons were pressed do the appropriate operation
-//        // and start again from the beginning of the loop
-//        if(volUp){
-//            if(vol <= 100){
-//                vol += 5;
-//                setVolume();
-//            }
-//             continue;
-//        }
-//        if(volDown){
-//            if(vol >= 0){
-//                vol -= 5;
-//                setVolume();
-//            }
-//            continue;
-//        }
+        while(!digitalRead(START_PIN) && 
+             !(volUp = digitalRead(VOLUP_PIN)) &&
+             !(volDown = digitalRead(VOLDOWN_PIN))){}
+        // if the volume buttons were pressed do the appropriate operation
+        // and start again from the beginning of the loop
+        if(volUp){
+            if(vol <= 100){
+               vol += 5;
+            }
+            setVolume();
+            continue;
+        }
+        if(volDown){
+            if(vol >= 0){
+               vol -= 5;
+            }
+            setVolume();
+            continue;
+        }
+        playAudio(VOLUME_SOUND);
         // iterate through each node and each emitter
         // pinging each receiver NUM_SAMPLES times each
         for(int i = 0; i < NUM_NODES; i++){
@@ -212,11 +245,21 @@ int main(int argc, char** argv) {
             for(int j = 0; j < NUM_RECEIVERS_PER_NODE; j++){
                 for(int k = 0; k < NUM_EMITTERS; k++){
                     // send ping signal
-                    ping(emitters[k]);
+                    ping(emitterPins[k]);
                 }
             }
             // wait to receive radio signal
             nodeData[i] = receiveData(i);
+        }
+        // check for errors
+        for(int i = 0; i < NUM_NODES; i++){
+            if(nodeData[i] == 0xFFFF){
+                error++;
+            }
+        }
+        if(error == NUM_NODES){
+            playAudio(ERROR_SOUND);
+            continue;
         }
         // take the data received and interpret it
         for(int i = 0; i < NUM_NODES; i++){
@@ -237,12 +280,12 @@ int main(int argc, char** argv) {
         for(int i = 0; i < NUM_NODES; i++){
             if(distance[i] < closestDistance){
                 closestDistance = distance[i];
-                closestEmitter = emitters[i];
-                closestNode = location[i]; 
+                closestEmitter = emitter[i];
+                closestNode = location[i];
             }
         }
         // output the closest node to the user via audio feedback
         userFeedback(closestNode, closestDistance, closestEmitter);
-    //}
+    }
     return (EXIT_SUCCESS);
 }

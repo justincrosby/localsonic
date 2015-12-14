@@ -22,18 +22,18 @@
 #define SOUND_40 "/root/soundfiles/40.wav"
 #define SOUND_45 "/root/soundfiles/45.wav"
 #define SOUND_50 "/root/soundfiles/50.wav"
-// "is"
+
 #define IS_SOUND "/root/soundfiles/is.wav"
-// "right"
+
 #define RIGHT_SOUND "/root/soundfiles/right.wav"
-// "left"
 #define LEFT_SOUND "/root/soundfiles/left.wav"
-// "ahead"
 #define AHEAD_SOUND "/root/soundfiles/ahead.wav"
- // "behind"
 #define BEHIND_SOUND "/root/soundfiles/behind.wav"
+#define AT_SOUND "/root/soundfiles/at.wav"
 // volume up and down indicator
-#define VOLUME_SOUND "/root/volume.wav"
+#define VOLUME_SOUND "/root/soundfiles/volume.wav"
+#define ERROR_SOUND "/root/soundfiles/error.wav"
+#define WELCOME_SOUND "/root/soundfiles/welcome.wav"
 
 #define AHEAD 0
 #define RIGHT 1
